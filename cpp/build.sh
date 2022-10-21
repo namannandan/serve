@@ -55,17 +55,22 @@ function install_dependencies_linux() {
     libdouble-conversion-dev \
     ninja-build \
     clang-tidy \
-    clang-format
+    clang-format \
+    libyaml-cpp-dev
 }
 
 function install_dependencies_mac() {
   # install the default dependencies from homebrew
   brew install -f            \
-    llvm
+    llvm                     \
+    yaml-cpp
 
   ln -s "$(brew --prefix llvm)/bin/clang-format" "/usr/local/bin/clang-format"
   ln -s "$(brew --prefix llvm)/bin/clang-tidy" "/usr/local/bin/clang-tidy"
   ln -s "$(brew --prefix llvm)/bin/clang-apply-replacements" "/usr/local/bin/clang-apply-replacements"
+
+  brew link --overwrite -f   \
+    yaml-cpp
 }
 
 function install_dependencies_mac_ori() {
