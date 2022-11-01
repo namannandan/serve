@@ -55,22 +55,17 @@ function install_dependencies_linux() {
     libdouble-conversion-dev \
     ninja-build \
     clang-tidy \
-    clang-format \
-    libyaml-cpp-dev
+    clang-format
 }
 
 function install_dependencies_mac() {
   # install the default dependencies from homebrew
   brew install -f            \
-    llvm                     \
-    yaml-cpp
+    llvm
 
   ln -s "$(brew --prefix llvm)/bin/clang-format" "/usr/local/bin/clang-format"
   ln -s "$(brew --prefix llvm)/bin/clang-tidy" "/usr/local/bin/clang-tidy"
   ln -s "$(brew --prefix llvm)/bin/clang-apply-replacements" "/usr/local/bin/clang-apply-replacements"
-
-  brew link --overwrite -f   \
-    yaml-cpp
 }
 
 function install_dependencies_mac_ori() {
@@ -201,6 +196,39 @@ function install_libtorch() {
       exit 1
     fi
     echo -e "${COLOR_GREEN}[ INFO ] libtorch is installed ${COLOR_OFF}"
+  fi
+
+  cd "$BWD" || exit
+}
+
+function install_yaml_cpp() {
+  YAML_CPP_SRC_DIR=$BASE_DIR/third-party/yaml-cpp
+  YAML_CPP_BUILD_DIR=$YAML_CPP_SRC_DIR/build
+
+  if [ ! -d "$YAML_CPP_SRC_DIR" ] ; then
+    echo -e "${COLOR_GREEN}[ INFO ] Cloning yaml-cpp repo ${COLOR_OFF}"
+    git clone https://github.com/jbeder/yaml-cpp.git "$YAML_CPP_SRC_DIR"
+    cd $YAML_CPP_SRC_DIR
+    git checkout tags/yaml-cpp-0.7.0
+  fi
+
+  if [ ! -d "$YAML_CPP_BUILD_DIR" ] ; then
+    echo -e "${COLOR_GREEN}[ INFO ] Building yaml-cpp ${COLOR_OFF}"
+
+    mkdir $YAML_CPP_BUILD_DIR
+    cd $YAML_CPP_BUILD_DIR
+
+    if [ "$PLATFORM" = "Linux" ]; then
+      SUDO="sudo"
+    elif [ "$PLATFORM" = "Mac" ]; then
+      SUDO=""
+    fi
+
+    cmake $YAML_CPP_SRC_DIR -DYAML_BUILD_SHARED_LIBS=ON -DYAML_CPP_BUILD_TESTS=OFF -DCMAKE_CXX_FLAGS="-fPIC"
+    make
+    $SUDO make install
+
+    echo -e "${COLOR_GREEN}[ INFO ] yaml-cpp is installed ${COLOR_OFF}"
   fi
 
   cd "$BWD" || exit
@@ -363,5 +391,6 @@ cd "$(dirname "$0")"
 install_folly
 install_kineto
 install_libtorch
+install_yaml_cpp
 build
 symlink_torch_libs

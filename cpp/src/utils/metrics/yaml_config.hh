@@ -14,24 +14,35 @@ namespace torchserve {
 class YAMLMetricsConfigurationHandler : public MetricsConfigurationHandler {
  public:
   YAMLMetricsConfigurationHandler()
-      : dimension_names{}, system_metrics{}, model_metrics{} {}
+      : mode{MetricsMode::LOG},
+        dimension_names{},
+        model_metrics{},
+        ts_metrics{} {}
   ~YAMLMetricsConfigurationHandler() override {}
-  void LoadConfiguration(const std::string metrics_config_file_path) override;
+  void LoadConfiguration(const std::string& metrics_config_file_path,
+                         const MetricsContext& metrics_context) override;
+  MetricsMode GetMode() override;
   std::set<std::string> GetDimensionNames() override;
-  std::vector<MetricConfiguration> GetSystemMetrics() override;
   std::vector<MetricConfiguration> GetModelMetrics() override;
+  std::vector<MetricConfiguration> GetTsMetrics() override;
 
  private:
+  MetricsMode mode;
   std::set<std::string> dimension_names;
-  std::vector<MetricConfiguration> system_metrics;
   std::vector<MetricConfiguration> model_metrics;
+  std::vector<MetricConfiguration> ts_metrics;
 
   void ClearConfiguration();
+  void ParseMode(const YAML::Node& document_node);
   void ParseDimensionNames(const YAML::Node& document_node);
-  void ParseSystemMetrics(const YAML::Node& document_node);
   void ParseModelMetrics(const YAML::Node& document_node);
-  std::vector<MetricConfiguration> ParseMetrics(
-      const YAML::Node& metrics_list_node, const MetricType& metric_type);
+  void ParseTsMetrics(const YAML::Node& document_node);
+  void ParseMetricTypes(const YAML::Node& metric_types_node,
+                        std::vector<MetricConfiguration>& metrics_config_store);
+  void ParseMetrics(const YAML::Node& metrics_list_node,
+                    const MetricType& metric_type,
+                    std::vector<MetricConfiguration>& metrics_config_store);
+  void ValidateMetricConfiguration(const MetricConfiguration& metric_config);
 };
 }  // namespace torchserve
 

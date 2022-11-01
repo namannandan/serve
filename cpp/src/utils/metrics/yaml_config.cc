@@ -6,14 +6,18 @@
 
 namespace torchserve {
 void YAMLMetricsConfigurationHandler::LoadConfiguration(
-    const std::string metrics_config_file_path) {
+    const std::string& metrics_config_file_path,
+    const MetricsContext& metrics_context) {
   ClearConfiguration();
 
   try {
     YAML::Node config_node = YAML::LoadFile(metrics_config_file_path);
+    ParseMode(config_node);
     ParseDimensionNames(config_node);
-    ParseSystemMetrics(config_node);
     ParseModelMetrics(config_node);
+    if (metrics_context == MetricsContext::FRONTEND) {
+      ParseTsMetrics(config_node);
+    }
   } catch (YAML::ParserException& e) {
     TS_LOGF(ERROR, "[METRICS]Failed to parse YAML configuration file: {}. {}",
             metrics_config_file_path, e.what());
@@ -30,13 +34,10 @@ void YAMLMetricsConfigurationHandler::LoadConfiguration(
   }
 }
 
+MetricsMode YAMLMetricsConfigurationHandler::GetMode() { return mode; }
+
 std::set<std::string> YAMLMetricsConfigurationHandler::GetDimensionNames() {
   return dimension_names;
-}
-
-std::vector<MetricConfiguration>
-YAMLMetricsConfigurationHandler::GetSystemMetrics() {
-  return system_metrics;
 }
 
 std::vector<MetricConfiguration>
@@ -44,10 +45,26 @@ YAMLMetricsConfigurationHandler::GetModelMetrics() {
   return model_metrics;
 }
 
+std::vector<MetricConfiguration>
+YAMLMetricsConfigurationHandler::GetTsMetrics() {
+  return ts_metrics;
+}
+
 void YAMLMetricsConfigurationHandler::ClearConfiguration() {
+  mode = MetricsMode::LOG;
   dimension_names.clear();
-  system_metrics.clear();
   model_metrics.clear();
+  ts_metrics.clear();
+}
+
+void YAMLMetricsConfigurationHandler::ParseMode(
+    const YAML::Node& document_node) {
+  if (document_node["mode"] &&
+      document_node["mode"].as<std::string>() == "prometheus") {
+    mode = MetricsMode::PROMETHEUS;
+  } else {
+    mode = MetricsMode::LOG;
+  }
 }
 
 void YAMLMetricsConfigurationHandler::ParseDimensionNames(
@@ -73,91 +90,72 @@ void YAMLMetricsConfigurationHandler::ParseDimensionNames(
   }
 }
 
-void YAMLMetricsConfigurationHandler::ParseSystemMetrics(
-    const YAML::Node& document_node) {
-  if (!document_node["ts_metrics"]) {
-    return;
-  }
-
-  const YAML::Node system_metrics_node = document_node["ts_metrics"];
-
-  if (system_metrics_node["counter"]) {
-    const std::vector<MetricConfiguration> counter_metrics =
-        ParseMetrics(system_metrics_node["counter"], MetricType::COUNTER);
-    system_metrics.insert(system_metrics.end(), counter_metrics.begin(),
-                          counter_metrics.end());
-  }
-
-  if (system_metrics_node["gauge"]) {
-    const std::vector<MetricConfiguration> gauge_metrics =
-        ParseMetrics(system_metrics_node["gauge"], MetricType::GAUGE);
-    system_metrics.insert(system_metrics.end(), gauge_metrics.begin(),
-                          gauge_metrics.end());
-  }
-
-  if (system_metrics_node["histogram"]) {
-    const std::vector<MetricConfiguration> histogram_metrics =
-        ParseMetrics(system_metrics_node["histogram"], MetricType::HISTOGRAM);
-    system_metrics.insert(system_metrics.end(), histogram_metrics.begin(),
-                          histogram_metrics.end());
-  }
-}
-
 void YAMLMetricsConfigurationHandler::ParseModelMetrics(
     const YAML::Node& document_node) {
-  if (!document_node["model_metrics"]) {
-    return;
-  }
-
-  const YAML::Node model_metrics_node = document_node["model_metrics"];
-
-  if (model_metrics_node["counter"]) {
-    const std::vector<MetricConfiguration> counter_metrics =
-        ParseMetrics(model_metrics_node["counter"], MetricType::COUNTER);
-    model_metrics.insert(model_metrics.end(), counter_metrics.begin(),
-                         counter_metrics.end());
-  }
-
-  if (model_metrics_node["gauge"]) {
-    const std::vector<MetricConfiguration> gauge_metrics =
-        ParseMetrics(model_metrics_node["gauge"], MetricType::GAUGE);
-    model_metrics.insert(model_metrics.end(), gauge_metrics.begin(),
-                         gauge_metrics.end());
-  }
-
-  if (model_metrics_node["histogram"]) {
-    const std::vector<MetricConfiguration> histogram_metrics =
-        ParseMetrics(model_metrics_node["histogram"], MetricType::HISTOGRAM);
-    model_metrics.insert(model_metrics.end(), histogram_metrics.begin(),
-                         histogram_metrics.end());
+  if (document_node["model_metrics"]) {
+    ParseMetricTypes(document_node["model_metrics"], model_metrics);
   }
 }
 
-std::vector<MetricConfiguration> YAMLMetricsConfigurationHandler::ParseMetrics(
-    const YAML::Node& metrics_list_node, const MetricType& metric_type) {
-  std::vector<MetricConfiguration> metrics_config =
-      metrics_list_node.as<std::vector<MetricConfiguration>>();
-  for (auto& metric : metrics_config) {
-    std::set<std::string> metric_dimensions_set{};
-    for (const auto& name : metric.dimension_names) {
-      if (dimension_names.find(name) == dimension_names.end()) {
-        std::string error_message =
-            "Dimension \"" + name +
-            "\" associated with metric: " + metric.name +
-            " not defined under central \"dimensions\" key in configuration";
-        throw YAML::Exception(YAML::Mark::null_mark(), error_message);
-      }
-      if (metric_dimensions_set.insert(name).second == false) {
-        std::string error_message =
-            "Dimensions for metric: " + metric.name + " must be unique";
-        throw YAML::Exception(YAML::Mark::null_mark(), error_message);
-      }
-    }
+void YAMLMetricsConfigurationHandler::ParseTsMetrics(
+    const YAML::Node& document_node) {
+  if (document_node["ts_metrics"]) {
+    ParseMetricTypes(document_node["ts_metrics"], ts_metrics);
+  }
+}
 
-    metric.type = metric_type;
+void YAMLMetricsConfigurationHandler::ParseMetricTypes(
+    const YAML::Node& metric_types_node,
+    std::vector<MetricConfiguration>& metrics_config_store) {
+  if (metric_types_node["counter"]) {
+    ParseMetrics(metric_types_node["counter"], MetricType::COUNTER,
+                 metrics_config_store);
   }
 
-  return metrics_config;
+  if (metric_types_node["gauge"]) {
+    ParseMetrics(metric_types_node["gauge"], MetricType::GAUGE,
+                 metrics_config_store);
+  }
+
+  if (metric_types_node["histogram"]) {
+    ParseMetrics(metric_types_node["histogram"], MetricType::HISTOGRAM,
+                 metrics_config_store);
+  }
+}
+
+void YAMLMetricsConfigurationHandler::ParseMetrics(
+    const YAML::Node& metrics_list_node, const MetricType& metric_type,
+    std::vector<MetricConfiguration>& metrics_config_store) {
+  std::vector<MetricConfiguration> metrics_config =
+      metrics_list_node.as<std::vector<MetricConfiguration>>();
+  for (auto& config : metrics_config) {
+    config.type = metric_type;
+    ValidateMetricConfiguration(config);
+  }
+
+  metrics_config_store.insert(metrics_config_store.end(),
+                              metrics_config.begin(), metrics_config.end());
+}
+
+void YAMLMetricsConfigurationHandler::ValidateMetricConfiguration(
+    const MetricConfiguration& metric_config) {
+  std::set<std::string> metric_dimensions_set{};
+
+  for (const auto& name : metric_config.dimension_names) {
+    if (dimension_names.find(name) == dimension_names.end()) {
+      std::string error_message =
+          "Dimension \"" + name +
+          "\" associated with metric: " + metric_config.name +
+          " not defined under central \"dimensions\" key in configuration";
+      throw YAML::Exception(YAML::Mark::null_mark(), error_message);
+    }
+
+    if (metric_dimensions_set.insert(name).second == false) {
+      std::string error_message =
+          "Dimensions for metric: " + metric_config.name + " must be unique";
+      throw YAML::Exception(YAML::Mark::null_mark(), error_message);
+    }
+  }
 }
 }  // namespace torchserve
 
