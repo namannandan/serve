@@ -44,14 +44,16 @@ class SocketServer {
                   const std::string& port_num,
                   const torchserve::Manifest::RuntimeType& runtime_type,
                   torchserve::DeviceType device_type,
-                  const std::string& model_dir);
+                  const std::string& model_dir,
+                  const std::string& metrics_config_path);
 
   void Run();
 
  private:
   SocketServer(){};
   bool CreateBackend(const torchserve::Manifest::RuntimeType& runtime_type,
-                     const std::string& model_dir);
+                     const std::string& model_dir,
+                     const std::string& metrics_config_path);
 
   // TODO; impl.
   // short MAX_FAILURE_THRESHOLD = 5;

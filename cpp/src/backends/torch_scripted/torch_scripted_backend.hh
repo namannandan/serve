@@ -26,7 +26,8 @@ class Backend final : public torchserve::Backend {
     }
   };
 
-  bool Initialize(const std::string& model_dir) override;
+  bool Initialize(const std::string& model_dir,
+                  const std::string& metrics_config_path) override;
 
   std::unique_ptr<torchserve::LoadModelResponse> LoadModelInternal(
       std::shared_ptr<torchserve::LoadModelRequest> load_model_request)
@@ -45,11 +46,15 @@ class ModelInstance final : public torchserve::ModelInstance {
       const std::string& instance_id,
       std::shared_ptr<torch::jit::script::Module> model,
       std::shared_ptr<torchserve::torchscripted::BaseHandler>& handler,
-      std::shared_ptr<torch::Device> device)
+      std::shared_ptr<torch::Device> device,
+      std::shared_ptr<torchserve::Manifest>& manifest,
+      std::shared_ptr<torchserve::MetricsCache>& metrics_cache)
       : torchserve::ModelInstance(instance_id),
         model_(model),
         handler_(handler),
-        device_(device){};
+        device_(device),
+        manifest_(manifest),
+        metrics_cache_(metrics_cache){};
   ~ModelInstance() override = default;
 
   std::shared_ptr<torchserve::InferenceResponseBatch> Predict(
@@ -60,6 +65,8 @@ class ModelInstance final : public torchserve::ModelInstance {
   std::shared_ptr<torch::jit::script::Module> model_;
   std::shared_ptr<torchserve::torchscripted::BaseHandler> handler_;
   std::shared_ptr<torch::Device> device_;
+  std::shared_ptr<torchserve::Manifest> manifest_;
+  std::shared_ptr<torchserve::MetricsCache> metrics_cache_;
 };
 }  // namespace torchscripted
 }  // namespace torchserve

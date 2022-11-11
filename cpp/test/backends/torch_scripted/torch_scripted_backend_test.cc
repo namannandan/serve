@@ -17,11 +17,11 @@ class TorchScriptedBackendTest : public ::testing::Test {
 
   void LoadPredict(
       std::shared_ptr<torchserve::LoadModelRequest> load_model_request,
-      const std::string& model_dir,
+      const std::string& model_dir, const std::string& metrics_config_path,
       const std::string& inference_input_file_path,
       const std::string& inference_request_id_prefix,
       int inference_expect_code) {
-    backend_->Initialize(model_dir);
+    backend_->Initialize(model_dir, metrics_config_path);
     auto result = backend_->LoadModel(std::move(load_model_request));
     ASSERT_EQ(result->code, 200);
 
@@ -62,6 +62,7 @@ TEST_F(TorchScriptedBackendTest, TestLoadPredictBaseHandler) {
                         "test/resources/torchscript_model/mnist/mnist_handler",
                         "mnist_scripted_v2", -1, "", "", 1, false),
                     "test/resources/torchscript_model/mnist/base_handler",
+                    "test/resources/metrics/default_config.yaml",
                     "test/resources/torchscript_model/mnist/0_png.pt",
                     "mnist_ts", 200);
 }
@@ -71,23 +72,35 @@ TEST_F(TorchScriptedBackendTest, TestLoadPredictMnistHandler) {
                         "test/resources/torchscript_model/mnist/mnist_handler",
                         "mnist_scripted_v2", -1, "", "", 1, false),
                     "test/resources/torchscript_model/mnist/mnist_handler",
+                    "test/resources/metrics/default_config.yaml",
                     "test/resources/torchscript_model/mnist/0_png.pt",
                     "mnist_ts", 200);
 }
 
 TEST_F(TorchScriptedBackendTest, TestBackendInitWrongModelDir) {
-  auto result = backend_->Initialize("test/resources/torchscript_model/mnist");
+  auto result =
+      backend_->Initialize("test/resources/torchscript_model/mnist",
+                           "test/resources/metrics/default_config.yaml");
   ASSERT_EQ(result, false);
 }
 
 TEST_F(TorchScriptedBackendTest, TestBackendInitWrongHandler) {
   auto result = backend_->Initialize(
-      "test/resources/torchscript_model/mnist/wrong_handler");
+      "test/resources/torchscript_model/mnist/wrong_handler",
+      "test/resources/metrics/default_config.yaml");
+  ASSERT_EQ(result, false);
+}
+
+TEST_F(TorchScriptedBackendTest, TestBackendInitInvalidMetricsConfig) {
+  auto result = backend_->Initialize(
+      "test/resources/torchscript_model/mnist/mnist_handler",
+      "test/resources/metrics/invalid_config_undefined_dimension.yaml");
   ASSERT_EQ(result, false);
 }
 
 TEST_F(TorchScriptedBackendTest, TestLoadModelFailure) {
-  backend_->Initialize("test/resources/torchscript_model/mnist/wrong_model");
+  backend_->Initialize("test/resources/torchscript_model/mnist/wrong_model",
+                       "test/resources/metrics/default_config.yaml");
   auto result =
       backend_->LoadModel(std::make_shared<torchserve::LoadModelRequest>(
           "test/resources/torchscript_model/mnist/wrong_model",
@@ -100,6 +113,7 @@ TEST_F(TorchScriptedBackendTest, TestLoadPredictMnistHandlerFailure) {
                         "test/resources/torchscript_model/mnist/mnist_handler",
                         "mnist_scripted_v2", -1, "", "", 1, false),
                     "test/resources/torchscript_model/mnist/mnist_handler",
+                    "test/resources/metrics/default_config.yaml",
                     "test/resources/torchscript_model/mnist/0.png", "mnist_ts",
                     500);
 }

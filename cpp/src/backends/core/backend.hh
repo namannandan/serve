@@ -11,7 +11,10 @@
 #include <utility>
 
 #include "src/utils/config.hh"
+#include "src/utils/logging.hh"
 #include "src/utils/message.hh"
+#include "src/utils/metrics/log_metrics_cache.hh"
+#include "src/utils/metrics/yaml_config.hh"
 
 namespace torchserve {
 /**
@@ -67,8 +70,23 @@ class Backend {
   Backend() = default;
   virtual ~Backend() = default;
 
-  virtual bool Initialize(const std::string& model_dir) {
+  virtual bool Initialize(const std::string& model_dir,
+                          const std::string& metrics_config_path) {
     random_generator_.seed(time(0));
+
+    std::shared_ptr<torchserve::MetricsConfigurationHandler>
+        metrics_config_handler =
+            std::make_shared<torchserve::YAMLMetricsConfigurationHandler>();
+    metrics_cache_ = std::make_shared<torchserve::LogMetricsCache>();
+    try {
+      metrics_config_handler->LoadConfiguration(
+          metrics_config_path, torchserve::MetricsContext::BACKEND);
+    } catch (std::invalid_argument& e) {
+      TS_LOG(ERROR, e.what());
+      return false;
+    }
+    metrics_cache_->Initialize(*metrics_config_handler);
+
     manifest_ = std::make_shared<torchserve::Manifest>();
     // TODO: windows
     return manifest_->Initialize(
@@ -105,6 +123,8 @@ class Backend {
   std::vector<std::string> ready_model_instance_ids_;
 
   std::atomic_uint16_t model_instance_count_ = 0;
+
+  std::shared_ptr<torchserve::MetricsCache> metrics_cache_;
 
  private:
   std::size_t Random();

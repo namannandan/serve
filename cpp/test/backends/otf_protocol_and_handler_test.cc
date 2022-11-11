@@ -68,7 +68,8 @@ TEST(BackendIntegTest, TestOTFProtocolAndHandler) {
 
   // initialize backend
   auto backend = std::make_shared<torchserve::torchscripted::Backend>();
-  backend->Initialize("test/resources/torchscript_model/mnist/base_handler");
+  backend->Initialize("test/resources/torchscript_model/mnist/base_handler",
+                      "test/resources/metrics/default_config.yaml");
 
   // load the model
   auto load_model_response = backend->LoadModel(load_model_request);

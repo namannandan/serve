@@ -2,15 +2,17 @@
 
 namespace torchserve {
 namespace torchscripted {
-bool Backend::Initialize(const std::string& model_dir) {
-  if (!torchserve::Backend::Initialize(model_dir)) {
+bool Backend::Initialize(const std::string& model_dir,
+                         const std::string& metrics_config_path) {
+  if (!torchserve::Backend::Initialize(model_dir, metrics_config_path)) {
     return false;
   }
   LoadHandler(model_dir);
   if (!handler_) {
     return false;
   }
-  handler_->Initialize(model_dir, manifest_);
+
+  handler_->Initialize(model_dir, manifest_, metrics_cache_);
 
   // TODO: support request envelope:
   // https://github.com/pytorch/serve/tree/master/ts/torch_handler/request_envelope
@@ -54,7 +56,7 @@ std::unique_ptr<torchserve::LoadModelResponse> Backend::LoadModelInternal(
         model_instance_id, torchserve::Backend::ModelInstanceStatus::READY,
         std::make_shared<torchserve::torchscripted::ModelInstance>(
             model_instance_id, std::move(result.first), handler_,
-            std::move(result.second)));
+            std::move(result.second), manifest_, metrics_cache_));
 
     ready_model_instance_ids_.emplace_back(model_instance_id);
     std::string message =
@@ -74,12 +76,26 @@ std::unique_ptr<torchserve::LoadModelResponse> Backend::LoadModelInternal(
 
 std::shared_ptr<torchserve::InferenceResponseBatch> ModelInstance::Predict(
     std::shared_ptr<torchserve::InferenceRequestBatch> request_batch) {
+  auto start_time = std::chrono::high_resolution_clock::now();
+
   auto response_batch = std::make_shared<torchserve::InferenceResponseBatch>();
   for (const auto& request : (*request_batch)) {
     (*response_batch)[request.request_id] =
         std::make_shared<torchserve::InferenceResponse>(request.request_id);
   }
   handler_->Handle(model_, device_, request_batch, response_batch);
+
+  auto stop_time = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = stop_time - start_time;
+  try {
+    auto& prediction_time_metric = metrics_cache_->GetMetric(
+        torchserve::MetricType::GAUGE, "PredictionTime");
+    prediction_time_metric.AddOrUpdate(
+        std::vector<std::string>{manifest_->GetModel().model_name, "Model"},
+        duration.count());
+  } catch (std::invalid_argument& e) {
+    TS_LOGF(ERROR, "Failed to record metric. {}", e.what());
+  }
 
   return response_batch;
 }

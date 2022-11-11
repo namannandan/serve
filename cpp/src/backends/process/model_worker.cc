@@ -7,7 +7,8 @@ void SocketServer::Initialize(
     const std::string& socket_type, const std::string& socket_name,
     const std::string& host_addr, const std::string& port_num,
     const torchserve::Manifest::RuntimeType& runtime_type,
-    torchserve::DeviceType device_type, const std::string& model_dir) {
+    torchserve::DeviceType device_type, const std::string& model_dir,
+    const std::string& metrics_config_path) {
   unsigned short socket_family = AF_INET;
   socket_type_ = socket_type;
   if (device_type != "cpu" && device_type != "gpu") {
@@ -46,8 +47,10 @@ void SocketServer::Initialize(
     TS_LOGF(FATAL, "Failed to create socket descriptor. errno: {}", errno);
   }
 
-  if (!CreateBackend(runtime_type, model_dir)) {
-    TS_LOGF(FATAL, "Failed to create backend, model_dir: {}", model_dir);
+  if (!CreateBackend(runtime_type, model_dir, metrics_config_path)) {
+    TS_LOGF(FATAL,
+            "Failed to create backend, model_dir: {}, metrics_config_path: {}",
+            model_dir, metrics_config_path);
   }
 }
 
@@ -107,10 +110,10 @@ void SocketServer::Run() {
 
 bool SocketServer::CreateBackend(
     const torchserve::Manifest::RuntimeType& runtime_type,
-    const std::string& model_dir) {
+    const std::string& model_dir, const std::string& metrics_config_path) {
   if (runtime_type == "LSP") {
     backend_ = std::make_shared<torchserve::torchscripted::Backend>();
-    return backend_->Initialize(model_dir);
+    return backend_->Initialize(model_dir, metrics_config_path);
   }
   return false;
 }

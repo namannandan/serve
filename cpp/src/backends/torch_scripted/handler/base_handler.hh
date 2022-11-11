@@ -4,13 +4,17 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
+#include <chrono>
+#include <exception>
 #include <functional>
 #include <map>
 #include <memory>
+#include <ratio>
 #include <utility>
 
 #include "src/utils/logging.hh"
 #include "src/utils/message.hh"
+#include "src/utils/metrics/cache.hh"
 #include "src/utils/model_archive.hh"
 
 namespace torchserve {
@@ -30,10 +34,13 @@ class BaseHandler {
   // NOLINTEND(bugprone-exception-escape)
   virtual ~BaseHandler() = default;
 
-  virtual void Initialize(const std::string& model_dir,
-                          std::shared_ptr<torchserve::Manifest>& manifest) {
+  virtual void Initialize(
+      const std::string& model_dir,
+      std::shared_ptr<torchserve::Manifest>& manifest,
+      std::shared_ptr<torchserve::MetricsCache>& metrics_cache) {
     model_dir_ = model_dir;
     manifest_ = manifest;
+    metrics_cache_ = metrics_cache;
   };
 
   virtual std::pair<std::shared_ptr<torch::jit::script::Module>,
@@ -70,12 +77,27 @@ class BaseHandler {
       std::shared_ptr<torchserve::InferenceRequestBatch>& request_batch,
       std::shared_ptr<torchserve::InferenceResponseBatch>& response_batch) {
     try {
+      auto start_time = std::chrono::high_resolution_clock::now();
+
       std::map<uint8_t, std::string> idx_to_req_id;
       auto inputs =
           Preprocess(device, idx_to_req_id, request_batch, response_batch);
       auto outputs =
           Inference(model, inputs, device, idx_to_req_id, response_batch);
       Postprocess(outputs, idx_to_req_id, response_batch);
+
+      auto stop_time = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double, std::milli> duration =
+          stop_time - start_time;
+      try {
+        auto& handler_time_metric = metrics_cache_->GetMetric(
+            torchserve::MetricType::GAUGE, "HandlerTime");
+        handler_time_metric.AddOrUpdate(
+            std::vector<std::string>{manifest_->GetModel().model_name, "Model"},
+            duration.count());
+      } catch (std::invalid_argument& e) {
+        TS_LOGF(ERROR, "Failed to record metric. {}", e.what());
+      }
     } catch (...) {
       TS_LOG(ERROR, "Failed to handle this batch");
     }
@@ -87,6 +109,7 @@ class BaseHandler {
 
   std::shared_ptr<torchserve::Manifest> manifest_;
   std::string model_dir_;
+  std::shared_ptr<torchserve::MetricsCache> metrics_cache_;
 };
 }  // namespace torchscripted
 }  // namespace torchserve
