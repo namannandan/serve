@@ -266,7 +266,7 @@ public class WorkerLifeCycle {
                 Pattern.compile("^(INFO > )?(\\[PID])(\\d+)$");
         private static final Logger loggerModelOutput =
                 LoggerFactory.getLogger(ConfigManager.MODEL_LOGGER);
-        private static final MetricCache METRIC_CACHE = MetricCache.getInstance();
+        private final MetricCache metricCache;
         private InputStream is;
         private boolean error;
         private WorkerLifeCycle lifeCycle;
@@ -277,6 +277,7 @@ public class WorkerLifeCycle {
             this.is = is;
             this.error = error;
             this.lifeCycle = lifeCycle;
+            this.metricCache = MetricCache.getInstance();
         }
 
         public void terminate() {
@@ -297,14 +298,14 @@ public class WorkerLifeCycle {
                         logger.info("result={}, pattern={}", result, matcher.group(2));
                         Metric parsedMetric = Metric.parse(matcher.group(3));
                         if (parsedMetric != null) {
-                            if (METRIC_CACHE.getMetricBackend(parsedMetric.getMetricName())
+                            if (this.metricCache.getMetricBackend(parsedMetric.getMetricName())
                                     != null) {
                                 try {
                                     List<String> dimensionValues = new ArrayList<String>();
                                     for (Dimension dimension : parsedMetric.getDimensions()) {
                                         dimensionValues.add(dimension.getValue());
                                     }
-                                    METRIC_CACHE
+                                    this.metricCache
                                             .getMetricBackend(parsedMetric.getMetricName())
                                             .addOrUpdate(
                                                     dimensionValues,
