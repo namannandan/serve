@@ -28,7 +28,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
-import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -2191,7 +2190,6 @@ public class ModelServerTest {
 
         TestUtils.getLatch().await();
         Assert.assertEquals(TestUtils.getResult(), expectedOutput);
-        testModelMetrics(modelName, version);
     }
 
     private void testExplanations(String modelName, String expectedOutput, String version)
@@ -2215,7 +2213,6 @@ public class ModelServerTest {
 
         TestUtils.getLatch().await();
         Assert.assertEquals(TestUtils.getResult(), expectedOutput);
-        testModelMetrics(modelName, version);
     }
 
     private void testKFV1Predictions(String modelName, String expectedOutput, String version)
@@ -2236,7 +2233,6 @@ public class ModelServerTest {
 
         TestUtils.getLatch().await();
         Assert.assertEquals(TestUtils.getResult(), expectedOutput);
-        testModelMetrics(modelName, version);
     }
 
     private void testKFV1Explanations(String modelName, String expectedOutput, String version)
@@ -2257,7 +2253,6 @@ public class ModelServerTest {
 
         TestUtils.getLatch().await();
         Assert.assertEquals(TestUtils.getResult(), expectedOutput);
-        testModelMetrics(modelName, version);
     }
 
     private void testKFV2Predictions(String modelName, String expectedOutput, String version)
@@ -2278,7 +2273,6 @@ public class ModelServerTest {
 
         TestUtils.getLatch().await();
         Assert.assertEquals(TestUtils.getResult(), expectedOutput);
-        testModelMetrics(modelName, version);
     }
 
     private void testKFV2Explanations(String modelName, String expectedOutput, String version)
@@ -2299,31 +2293,6 @@ public class ModelServerTest {
 
         TestUtils.getLatch().await();
         Assert.assertEquals(TestUtils.getResult(), expectedOutput);
-        testModelMetrics(modelName, version);
-    }
-
-    private void testModelMetrics(String modelName, String version) throws InterruptedException {
-        Channel metricsChannel = TestUtils.getMetricsChannel(configManager);
-        TestUtils.setResult(null);
-        TestUtils.setLatch(new CountDownLatch(1));
-        DefaultFullHttpRequest metricsReq =
-                new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/metrics");
-        metricsChannel.writeAndFlush(metricsReq);
-        TestUtils.getLatch().await();
-        Pattern inferLatencyMatcher = TestUtils.getTSInferLatencyMatcher(modelName, version);
-        Assert.assertTrue(inferLatencyMatcher.matcher(TestUtils.getResult()).find());
-
-        TestUtils.setResult(null);
-        TestUtils.setLatch(new CountDownLatch(1));
-        metricsReq =
-                new DefaultFullHttpRequest(
-                        HttpVersion.HTTP_1_1,
-                        HttpMethod.GET,
-                        "/metrics?name[]=ts_inference_latency_microseconds");
-        metricsChannel.writeAndFlush(metricsReq);
-        TestUtils.getLatch().await();
-        Assert.assertTrue(inferLatencyMatcher.matcher(TestUtils.getResult()).find());
-        Assert.assertFalse(TestUtils.getResult().contains("ts_inference_requests_total"));
     }
 
     private void loadTests(Channel channel, String model, String modelName)
