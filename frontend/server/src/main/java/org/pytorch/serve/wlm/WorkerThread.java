@@ -17,6 +17,7 @@ import java.net.HttpURLConnection;
 import java.net.SocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -103,25 +104,9 @@ public class WorkerThread implements Runnable {
                 MetricCache.getInstance().getMetricFrontend("WorkerThreadTime");
         this.workerLoadTimeMetric = MetricCache.getInstance().getMetricFrontend("WorkerLoadTime");
         this.workerThreadTimeMetricDimensionValues =
-                new ArrayList<String>() {
-                    {
-                        // Dimension value corresponding to dimension name "Level"
-                        add("Host");
-                        // Frontend metrics by default have the last dimension as Hostname
-                        add(ConfigManager.getInstance().getHostName());
-                    }
-                };
+                Arrays.asList("Host", ConfigManager.getInstance().getHostName());
         this.workerLoadTimeMetricDimensionValues =
-                new ArrayList<String>() {
-                    {
-                        // Dimension value corresponding to dimension name "WorkerName"
-                        add(getWorkerName());
-                        // Dimension value corresponding to dimension name "Level"
-                        add("Host");
-                        // Frontend metrics by default have the last dimension as Hostname
-                        add(ConfigManager.getInstance().getHostName());
-                    }
-                };
+                Arrays.asList(getWorkerName(), "Host", ConfigManager.getInstance().getHostName());
     }
 
     public WorkerState getState() {
@@ -297,8 +282,6 @@ public class WorkerThread implements Runnable {
                     } catch (Exception e) {
                         logger.error("Failed to update frontend metric WorkerThreadTime: ", e);
                     }
-                } else {
-                    logger.error("Frontend metric WorkerThreadTime not present in metric cache");
                 }
             }
         } catch (InterruptedException e) {
@@ -513,8 +496,6 @@ public class WorkerThread implements Runnable {
                 } catch (Exception e) {
                     logger.error("Failed to update frontend metric WorkerLoadTime: ", e);
                 }
-            } else {
-                logger.error("Frontend metric WorkerLoadTime not present in metric cache");
             }
         }
     }

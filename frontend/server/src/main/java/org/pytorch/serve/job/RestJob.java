@@ -34,6 +34,9 @@ public class RestJob extends Job {
 
     private static final Logger logger = LoggerFactory.getLogger(Job.class);
 
+    private final IMetric inferenceLatencyMetric;
+    private final IMetric queueLatencyMetric;
+    private final List<String> latencyMetricDimensionValues;
     private final IMetric queueTimeMetric;
     private final List<String> queueTimeMetricDimensionValues;
     private ChannelHandlerContext ctx;
@@ -47,16 +50,18 @@ public class RestJob extends Job {
             RequestInput input) {
         super(modelName, version, cmd, input);
         this.ctx = ctx;
+        this.inferenceLatencyMetric =
+                MetricCache.getInstance().getMetricFrontend("ts_inference_latency_microseconds");
+        this.queueLatencyMetric =
+                MetricCache.getInstance().getMetricFrontend("ts_queue_latency_microseconds");
+        this.latencyMetricDimensionValues =
+                Arrays.asList(
+                        getModelName(),
+                        getModelVersion() == null ? "default" : getModelVersion(),
+                        ConfigManager.getInstance().getHostName());
         this.queueTimeMetric = MetricCache.getInstance().getMetricFrontend("QueueTime");
         this.queueTimeMetricDimensionValues =
-                new ArrayList<String>() {
-                    {
-                        // Dimension value corresponding to dimension name "Level"
-                        add("Host");
-                        // Frontend metrics by default have the last dimension as Hostname
-                        add(ConfigManager.getInstance().getHostName());
-                    }
-                };
+                Arrays.asList("Host", ConfigManager.getInstance().getHostName());
     }
 
     @Override
@@ -146,30 +151,21 @@ public class RestJob extends Job {
          * by external clients.
          */
         if (ctx != null) {
-            IMetric inferenceLatencyMetric =
-                    MetricCache.getInstance()
-                            .getMetricFrontend("ts_inference_latency_microseconds");
-            IMetric queueLatencyMetric =
-                    MetricCache.getInstance().getMetricFrontend("ts_queue_latency_microseconds");
-            List<String> latencyMetricDimensionValues =
-                    Arrays.asList(
-                            getModelName(),
-                            getModelVersion() == null ? "default" : getModelVersion(),
-                            ConfigManager.getInstance().getHostName());
-            if (inferenceLatencyMetric != null) {
+            if (this.inferenceLatencyMetric != null) {
                 try {
-                    inferenceLatencyMetric.addOrUpdate(
-                            latencyMetricDimensionValues, inferTime / 1000.0);
+                    this.inferenceLatencyMetric.addOrUpdate(
+                            this.latencyMetricDimensionValues, inferTime / 1000.0);
                 } catch (Exception e) {
                     logger.error(
                             "Failed to update frontend metric ts_inference_latency_microseconds: ",
                             e);
                 }
             }
-            if (queueLatencyMetric != null) {
+            if (this.queueLatencyMetric != null) {
                 try {
-                    queueLatencyMetric.addOrUpdate(
-                            latencyMetricDimensionValues, (getScheduled() - getBegin()) / 1000.0);
+                    this.queueLatencyMetric.addOrUpdate(
+                            this.latencyMetricDimensionValues,
+                            (getScheduled() - getBegin()) / 1000.0);
                 } catch (Exception e) {
                     logger.error(
                             "Failed to update frontend metric ts_queue_latency_microseconds: ", e);
@@ -195,8 +191,6 @@ public class RestJob extends Job {
             } catch (Exception e) {
                 logger.error("Failed to update frontend metric QueueTime: ", e);
             }
-        } else {
-            logger.error("Frontend metric QueueTime not present in metric cache");
         }
     }
 
